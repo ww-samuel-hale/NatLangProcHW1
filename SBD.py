@@ -1,5 +1,7 @@
 import os
 import re
+import sklearn
+from sklearn.tree import DecisionTreeClassifier
 #  - OBTAIN FEATURES
 
 #  - READ SBD.train
@@ -57,15 +59,46 @@ def extract_features(dataset, features):
                 L_len = len(L)
                 # trim whitespace when checking for capitalization
                 L_cap = L.strip()[0].isupper()
-                R_cap = R.strip()[0].isupper()
+                # convert L_cap to int
+                if L_cap:
+                    L_cap = 1
+                else:
+                    L_cap = 0
+                if R != '':
+                    R_cap = R.strip()[0].isupper()
+                    # convert R_cap to int
+                    if R_cap:
+                        R_cap = 1
+                    else: 
+                        R_cap = 0
+                else:
+                    R_cap = 0
                 L_period = L.count('.')
                 R_period = R.count('.')
-                # check if R starts with a space
                 R_space = 0
-                if R[0] == ' ':
+                if R != '' and R[0] == ' ':
                     R_space = 1
                 # append the features to the features list
-                features.append([L, R, L_len, L_cap, R_cap, L_period, R_period, R_space, EOS])
+                features.append([L_len, L_cap, R_cap, L_period, R_period, R_space, EOS])
     return features
 train_features = extract_features(train, [])
 test_features = extract_features(test, [])
+
+#  - TRAIN DECISION TREE CLASSIFIER
+clf = DecisionTreeClassifier()
+
+X_train = [f[:-1] for f in train_features]
+y_train = [f[-1] for f in train_features]
+
+clf.fit(X_train, y_train)
+
+#  - TEST DECISION TREE CLASSIFIER
+X_test = [f[:-1] for f in test_features]
+y_test = [f[-1] for f in test_features]
+
+y_pred = clf.predict(X_test)
+
+#  - EVALUATE DECISION TREE CLASSIFIER
+accuracy = sklearn.metrics.accuracy_score(y_test, y_pred) * 100
+print('Accuracy: ', accuracy)
+
