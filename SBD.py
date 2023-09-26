@@ -2,103 +2,60 @@ import os
 import re
 import sklearn
 from sklearn.tree import DecisionTreeClassifier
-#  - OBTAIN FEATURES
+from sklearn.metrics import accuracy_score
 
-#  - READ SBD.train
-with open('SBD.train', 'r') as f:
-    train = f.readlines()
+char_num = 1
+char_num_map = {}
 
-#  - LOOP THROUGH TRAIN AND REMOVE \n FROM EACH INDEX
-for i in range(len(train)):
-    # remove the number and space at the beginning of the line
-    train[i] = re.sub(r'^\d+\s', '', train[i])
-    # remove the 'TOK' at the end of the line
-    train[i] = train[i].replace('TOK', '').replace('\n', '')
-    
-#  - REPEAT FOR SBD.test
-with open('SBD.test', 'r') as f:
-    test = f.readlines()
-    
-for i in range(len(test)):
-    # remove the number and space at the beginning of the line
-    test[i] = re.sub(r'^\d+\s', '', test[i])
-    # remove the 'TOK' at the end of the line
-    test[i] = test[i].replace('TOK', '').replace('\n', '')
-    
-    
-#  - FEATURE EXTRACTION
+def read_file(file_path):
+    with open(file_path, 'r') as f:
+        lines = f.readlines()
+    return [re.sub(r'^\d+\s', '', line).replace('TOK', '').strip() for line in lines]
 
-# WE WILL BE USING THE FOLLOWING FEATURES
-#  - Word to the left of "." (L)
-#  - Word to the right of "." (R)
-#  - Length of L < 3  
-#  - Is L capitalized?
-#  - Is R capitalized?
-#  - count(period, R)  
-#  - count(period, L)
-#  - count(R, is lower case)
-def extract_features(dataset, features):
-    for i in range(len(dataset)):
-        # for each token in dataset we check for a period. If there is one we extract the features
-        if '.' in dataset[i]:
-            # split the token at the period
-            token = dataset[i].split('.')
-            # if the token is not empty
-            if token[0] != '':
-                # extract EOS or NEOS label from token[1]
-                if token[1].strip() == 'EOS':
-                    EOS = 1
-                else:
-                    EOS = 0
-                # extract the features
-                L = token[0]
-                if i+1 < len(dataset):
-                    R = dataset[i+1]
-                else:
-                    R = ''
-                L_len = len(L)
-                # trim whitespace when checking for capitalization
-                L_cap = L.strip()[0].isupper()
-                # convert L_cap to int
-                if L_cap:
-                    L_cap = 1
-                else:
-                    L_cap = 0
-                if R != '':
-                    R_cap = R.strip()[0].isupper()
-                    # convert R_cap to int
-                    if R_cap:
-                        R_cap = 1
-                    else: 
-                        R_cap = 0
-                else:
-                    R_cap = 0
-                L_period = L.count('.')
-                R_period = R.count('.')
-                R_space = 0
-                if R != '' and R[0] == ' ':
-                    R_space = 1
-                # append the features to the features list
-                features.append([L_len, L_cap, R_cap, L_period, R_period, R_space, EOS])
+def convert_to_ml_format(token):
+    global char_num
+    global char_num_map
+    for i in range(len(token)):
+        if token[i] not in char_num_map:
+            char_num_map[token[i]] = char_num
+            char_num += 1
+        token[i] = char_num_map[token[i]]
+    return int(''.join(map(str, token))) if token else 0
+
+def extract_features(dataset):
+    features = []
+    for i, token in enumerate(dataset):
+        if '. ' not in token:
+            continue
+        L, label = token.split('. ')
+        EOS = 1 if label.strip() == 'EOS' else 0
+        R = dataset[i + 1] if i + 1 < len(dataset) else ''
+        L_len = len(L)
+        if L_len > 0:
+            L_cap = int(L.strip()[0].isupper())
+        R_cap = int(R.strip()[0].isupper()) if R else 0
+        L_period = L.count('.')
+        R_period = R.count('.')
+        R_space = int(R.startswith(' '))
+        L = convert_to_ml_format(list(L))
+        R = convert_to_ml_format(list(R))
+        features.append([L, R, L_len, L_cap, R_cap, L_period, R_period, R_space, EOS])
     return features
-train_features = extract_features(train, [])
-test_features = extract_features(test, [])
 
-#  - TRAIN DECISION TREE CLASSIFIER
-clf = DecisionTreeClassifier()
+def train_and_evaluate(train_features, test_features):
+    clf = DecisionTreeClassifier()
+    X_train = [f[:-1] for f in train_features]
+    y_train = [f[-1] for f in train_features]
+    clf.fit(X_train, y_train)
+    X_test = [f[:-1] for f in test_features]
+    y_test = [f[-1] for f in test_features]
+    y_pred = clf.predict(X_test)
+    accuracy = accuracy_score(y_test, y_pred) * 100
+    print(f'Accuracy: {accuracy}')
 
-X_train = [f[:-1] for f in train_features]
-y_train = [f[-1] for f in train_features]
-
-clf.fit(X_train, y_train)
-
-#  - TEST DECISION TREE CLASSIFIER
-X_test = [f[:-1] for f in test_features]
-y_test = [f[-1] for f in test_features]
-
-y_pred = clf.predict(X_test)
-
-#  - EVALUATE DECISION TREE CLASSIFIER
-accuracy = sklearn.metrics.accuracy_score(y_test, y_pred) * 100
-print('Accuracy: ', accuracy)
-
+if __name__ == "__main__":
+    train = read_file('SBD.train')
+    test = read_file('SBD.test')
+    train_features = extract_features(train)
+    test_features = extract_features(test)
+    train_and_evaluate(train_features, test_features)
